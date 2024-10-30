@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
+// @audit-info use of floating pragma is bad!!
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -21,6 +22,9 @@ contract PuppyRaffle is ERC721, Ownable {
     uint256 public immutable entranceFee;
 
     address[] public players;
+
+    // e how long the raffle lasts
+    // @audit-gas this should be immutable
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -77,11 +81,9 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
-        // q were custom revert a thing during 0.7.6 of solidity?
         // what if it's 0?
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
         for (uint256 i = 0; i < newPlayers.length; i++) {
-            // q What resets the players array?
             players.push(newPlayers[i]);
         }
 
@@ -92,6 +94,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
             }
         }
+        // @followup/audit I fits and empty array, we still emit an event?
         emit RaffleEnter(newPlayers);
     }
 
@@ -119,7 +122,6 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
-        // q what if the player is at index 0?
         // @audit if the player is at index 0, it'll return 0 and a player might think they aren't active!
         return 0;
     }
@@ -131,8 +133,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
-        // q does this follow CEI?
-        // q are the duration & start time being set correct?
+        // @audit-info recommend to follow CEI
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
@@ -142,10 +143,14 @@ contract PuppyRaffle is ERC721, Ownable {
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
 
-        // q why not just do address(this).balance?
+        // @audit-info why not just do address(this).balance?
         uint256 totalAmountCollected = players.length * entranceFee;
-        // q is the 80% correct?
-        // q i bet there is and arithmetic overflow here...
+
+        // @audit-info Magic Numbers
+        // uint256 public constant PRIZE_POOL_PERCENTAGE = 80;
+        // uint256 public constant FEE_PERCENTAGE = 20;
+        // uint256 public constant POOL_PRECISION = 100;
+        // 0,1
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
         // e this is the total fee the owner should be able to collect
@@ -154,10 +159,13 @@ contract PuppyRaffle is ERC721, Ownable {
 
         // @audit unsafe cast of uint256 to uint64
         totalFees = totalFees + uint64(fee);
-
+        // e when we mint a new puppy NFT, we use the totalsupply as the tokenId
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
+        // @audit randomness
+
+        // @audit, people can revert the Tx till they win
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
         if (rarity <= COMMON_RARITY) {
             tokenIdToRarity[tokenId] = COMMON_RARITY;
@@ -167,9 +175,11 @@ contract PuppyRaffle is ERC721, Ownable {
             tokenIdToRarity[tokenId] = LEGENDARY_RARITY;
         }
 
-        delete players;
-        raffleStartTime = block.timestamp;
-        previousWinner = winner;
+        delete players; // e resetting the players array
+        raffleStartTime = block.timestamp; // e resetting the raffle start time
+        previousWinner = winner; // e vanity, doesn't matter much
+
+        // @audit the winner woudn't get the money if their fallback was messed up!
         (bool success,) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
         _safeMint(winner, tokenId);
@@ -177,6 +187,8 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
+        // @audit is it difficult to withdraw fees if their are players (MEV)
+        // @audit mishandling ETH!!!
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
@@ -192,6 +204,10 @@ contract PuppyRaffle is ERC721, Ownable {
     }
 
     /// @notice this function will return true if the msg.sender is an active player
+    // @audit this isn't used anywhere?
+    // IMPACT: none
+    // LIKELIHOOD: none
+    // ...but it's a waste of Gas I/G
     function _isActivePlayer() internal view returns (bool) {
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == msg.sender) {
