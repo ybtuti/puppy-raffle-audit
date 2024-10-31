@@ -102,3 +102,39 @@ place the following test into `PuppyRaffleTest.t.sol`.
 ```
 
 Alternatively, you can use [Openzeppelin's `EnumerableSet` library](https://docs.openzeppelin.com/contracts/4.x/api/utils#EnumerableSet). 
+
+# Gas
+
+## [G-1] Unchanged state variables should be declared constant or immutable
+
+Instances:
+- `PuppyRaffle::raffleDuration` should be `immutable`
+- `PuppyRaffle::commonImageUri` shuld be `constant`
+- `PuppyRaffle::rareImageUri` shuld be `constant`
+- `PuppyRaffle::legendaryImageUri` shuld be `constant`
+
+## [I-1] Solidity pragma should be specific, not wide
+
+Consider using a specific version of Solidity in your contracts instead of a wide version. For example, instead of `pragma solidity ^0.8.0;`, use `pragma solidity 0.8.0;`
+
+<details><summary>1 Found Instances</summary>
+
+
+- Found in src/PuppyRaffle.sol [Line: 2](src/PuppyRaffle.sol#L2)
+
+	```solidity
+	pragma solidity ^0.7.6;
+	```
+
+</details>
+
+## [I-2] Using an outdated version of solidity is not recommended.
+
+solc frequently releases new compiler versions. Using an old version prevents access to new Solidity security checks. We also recommend avoiding complex pragma statement.
+
+**Recommendation**:
+Deploy with a recent version of Solidity (at least 0.8.0) with no known severe issues.
+
+Use a simple pragma version that allows any of these versions. Consider using the latest version of Solidity for testing.
+
+Please see [slither](https://github.com/crytic/slither/wiki/Detector-Documentation#incorrect-versions-of-solidity) documentation fo more information
